@@ -334,6 +334,66 @@ partial class MainForm
         };
         btnResetComp.Click += BtnResetComp_Click;
         playFlow.Controls.Add(btnResetComp);
+        
+        // Demo Mode selection
+        playFlow.Controls.Add(new System.Windows.Forms.Label 
+        { 
+            Text = "Demo:", 
+            AutoSize = true, 
+            Margin = new System.Windows.Forms.Padding(20, 12, 5, 5),
+            Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold)
+        });
+        
+        rbDemoOff = new System.Windows.Forms.RadioButton 
+        { 
+            Text = "Off", 
+            AutoSize = true, 
+            Checked = true, 
+            Margin = new System.Windows.Forms.Padding(5, 8, 5, 5) 
+        };
+        rbDemoOff.CheckedChanged += RbDemo_CheckedChanged;
+        playFlow.Controls.Add(rbDemoOff);
+        
+        rbDemoSkiJump = new System.Windows.Forms.RadioButton 
+        { 
+            Text = "🎿 Ski Jump", 
+            AutoSize = true, 
+            Margin = new System.Windows.Forms.Padding(5, 8, 5, 5),
+            ForeColor = System.Drawing.Color.DarkBlue
+        };
+        rbDemoSkiJump.CheckedChanged += RbDemo_CheckedChanged;
+        playFlow.Controls.Add(rbDemoSkiJump);
+        
+        rbDemoTilt = new System.Windows.Forms.RadioButton 
+        { 
+            Text = "↔️ L/R Tilt", 
+            AutoSize = true, 
+            Margin = new System.Windows.Forms.Padding(5, 8, 5, 5),
+            ForeColor = System.Drawing.Color.DarkGreen
+        };
+        rbDemoTilt.CheckedChanged += RbDemo_CheckedChanged;
+        playFlow.Controls.Add(rbDemoTilt);
+        
+        rbDemoUnified = new System.Windows.Forms.RadioButton 
+        { 
+            Text = "⛷️ Unified", 
+            AutoSize = true, 
+            Margin = new System.Windows.Forms.Padding(5, 8, 5, 5),
+            ForeColor = System.Drawing.Color.DarkRed,
+            Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold)
+        };
+        rbDemoUnified.CheckedChanged += RbDemo_CheckedChanged;
+        playFlow.Controls.Add(rbDemoUnified);
+        
+        lblDemoStatus = new System.Windows.Forms.Label 
+        { 
+            Text = "", 
+            AutoSize = true, 
+            Margin = new System.Windows.Forms.Padding(10, 12, 5, 5),
+            ForeColor = System.Drawing.Color.Purple,
+            Font = new System.Drawing.Font("Consolas", 9F)
+        };
+        playFlow.Controls.Add(lblDemoStatus);
     }
 
     #endregion
@@ -361,5 +421,10 @@ partial class MainForm
     private System.Windows.Forms.Button btnPlayAudio;
     private System.Windows.Forms.Button btnResetComp;
     private System.Windows.Forms.CheckBox chkStream;
+    private System.Windows.Forms.RadioButton rbDemoOff;
+    private System.Windows.Forms.RadioButton rbDemoSkiJump;
+    private System.Windows.Forms.RadioButton rbDemoTilt;
+    private System.Windows.Forms.RadioButton rbDemoUnified;
+    private System.Windows.Forms.Label lblDemoStatus;
 }
 

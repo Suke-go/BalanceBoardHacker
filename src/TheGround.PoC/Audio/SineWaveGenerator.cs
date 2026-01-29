@@ -108,6 +108,18 @@ public class SineWaveGenerator : ISampleProvider
     public bool EnableChannel2 { get; set; } = true;
     
     /// <summary>
+    /// Per-channel amplitude for channel 1 (left). 0.0 to 1.0.
+    /// Multiplied with main Amplitude. Default 1.0 = use main Amplitude.
+    /// </summary>
+    public float Channel1Amplitude { get; set; } = 1.0f;
+    
+    /// <summary>
+    /// Per-channel amplitude for channel 2 (right). 0.0 to 1.0.
+    /// Multiplied with main Amplitude. Default 1.0 = use main Amplitude.
+    /// </summary>
+    public float Channel2Amplitude { get; set; } = 1.0f;
+    
+    /// <summary>
     /// Current output phase (0-2π), for synchronization with compensation.
     /// </summary>
     public double CurrentPhase => _phase;
@@ -175,8 +187,8 @@ public class SineWaveGenerator : ISampleProvider
                 sample = GenerateSnowSample();
             }
 
-            buffer[offset + i] = EnableChannel1 ? sample : 0f;      // Left (ch1)
-            buffer[offset + i + 1] = EnableChannel2 ? sample : 0f;  // Right (ch2)
+            buffer[offset + i] = EnableChannel1 ? sample * Channel1Amplitude : 0f;      // Left (ch1)
+            buffer[offset + i + 1] = EnableChannel2 ? sample * Channel2Amplitude : 0f;  // Right (ch2)
 
             _phase += phaseIncrement;
             if (_phase > 2 * Math.PI)

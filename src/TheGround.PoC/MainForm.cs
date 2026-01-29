@@ -4,6 +4,7 @@ using System.Numerics;
 using System.Windows.Forms;
 using TheGround.PoC.Audio;
 using TheGround.PoC.BalanceBoard;
+using TheGround.PoC.Demo;
 using TheGround.PoC.Network;
 using TheGround.PoC.SignalProcessing;
 
@@ -26,6 +27,9 @@ public partial class MainForm : Form
     private readonly CommandReceiver _commandReceiver;
     private readonly HapticController _hapticController;
     private readonly System.Windows.Forms.Timer _commandPollTimer;
+    
+    // Demo
+    private readonly DemoModeController _demoController;
 
     // State
     private Vector2 _rawCoP;
@@ -62,6 +66,7 @@ public partial class MainForm : Form
         _streamer = new CoPStreamer();
         _commandReceiver = new CommandReceiver(9001);
         _hapticController = new HapticController(_audioManager);
+        _demoController = new DemoModeController(_audioManager);
         
         // Command polling timer (50ms = 20Hz)
         _commandPollTimer = new System.Windows.Forms.Timer { Interval = 50 };
@@ -129,6 +134,9 @@ public partial class MainForm : Form
                 _copCalculator.IsCalibrated,
                 _vibrationCompensator.IsConverged,
                 isVibrating);
+            
+            // Update demo mode (if active)
+            _demoController.Update(_filteredCoP, _totalWeight > 5f);
         }
 
         // Throttle UI updates to prevent flooding (max 30 FPS)
@@ -409,11 +417,73 @@ public partial class MainForm : Form
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         _commandPollTimer.Stop();
+        _demoController.CurrentMode = DemoMode.Off;
         _audioManager.Dispose();
         _boardReader.Dispose();
         _streamer.Dispose();
         _commandReceiver.Dispose();
         base.OnFormClosing(e);
+    }
+    
+    // === Demo Mode Handlers ===
+    
+    private void RbDemo_CheckedChanged(object? sender, EventArgs e)
+    {
+        if (sender is not RadioButton rb || !rb.Checked)
+            return;
+        
+        DemoMode newMode = DemoMode.Off;
+        
+        if (rb == rbDemoSkiJump)
+            newMode = DemoMode.SkiJump;
+        else if (rb == rbDemoTilt)
+            newMode = DemoMode.LeftRightTilt;
+        else if (rb == rbDemoUnified)
+            newMode = DemoMode.Unified;
+        
+        // Initialize audio if needed
+        if (newMode != DemoMode.Off && !_audioManager.IsPlaying)
+        {
+            var selectedDevice = cmbAudioDevice.SelectedItem as AudioOutputManager.DeviceInfo;
+            _audioManager.Initialize(selectedDevice?.Id, latencyMs: 50);
+        }
+        
+        _demoController.CurrentMode = newMode;
+        
+        // Subscribe to debug info
+        _demoController.OnDebugInfo -= OnDemoDebugInfo;
+        if (newMode != DemoMode.Off)
+        {
+            _demoController.OnDebugInfo += OnDemoDebugInfo;
+        }
+        else
+        {
+            lblDemoStatus.Text = "";
+        }
+        
+        // Update play button state
+        if (newMode != DemoMode.Off)
+        {
+            btnPlayAudio.Text = "■ Demo";
+            btnPlayAudio.BackColor = System.Drawing.Color.Purple;
+        }
+        else if (!_audioManager.IsPlaying)
+        {
+            btnPlayAudio.Text = "▶ Play";
+            btnPlayAudio.BackColor = System.Drawing.Color.DarkOrange;
+        }
+    }
+    
+    private void OnDemoDebugInfo(string info)
+    {
+        if (InvokeRequired)
+        {
+            BeginInvoke(() => lblDemoStatus.Text = info);
+        }
+        else
+        {
+            lblDemoStatus.Text = info;
+        }
     }
 }
 
