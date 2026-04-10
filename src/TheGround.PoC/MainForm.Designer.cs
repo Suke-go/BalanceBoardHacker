@@ -19,8 +19,8 @@ partial class MainForm
     {
         this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Dpi;
         this.Text = "TheGround PoC - Balance Board Haptic Feedback";
-        this.Size = new System.Drawing.Size(1200, 750);
-        this.MinimumSize = new System.Drawing.Size(1000, 600);
+        this.Size = new System.Drawing.Size(1300, 800);
+        this.MinimumSize = new System.Drawing.Size(1150, 700);
         this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
         this.Font = new System.Drawing.Font("Segoe UI", 9F);
         this.BackColor = System.Drawing.Color.FromArgb(240, 240, 245);
@@ -34,8 +34,8 @@ partial class MainForm
             RowCount = 1,
             Padding = new System.Windows.Forms.Padding(5)
         };
-        mainTable.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 45F));
-        mainTable.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 55F));
+        mainTable.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 40F));
+        mainTable.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 60F));
         this.Controls.Add(mainTable);
 
         // === LEFT PANEL: CoP Visualization ===
@@ -335,12 +335,21 @@ partial class MainForm
         btnResetComp.Click += BtnResetComp_Click;
         playFlow.Controls.Add(btnResetComp);
         
-        // Demo Mode selection
-        playFlow.Controls.Add(new System.Windows.Forms.Label 
+        // Row 6: Demo Mode (separate row for clean layout)
+        var demoFlow = new System.Windows.Forms.FlowLayoutPanel 
         { 
-            Text = "Demo:", 
             AutoSize = true, 
-            Margin = new System.Windows.Forms.Padding(20, 12, 5, 5),
+            WrapContents = false, 
+            Margin = new System.Windows.Forms.Padding(0),
+            BackColor = System.Drawing.Color.FromArgb(245, 245, 250)  // Light background to distinguish
+        };
+        audioTable.Controls.Add(demoFlow, 0, 5);
+        
+        demoFlow.Controls.Add(new System.Windows.Forms.Label 
+        { 
+            Text = "Demo Mode:", 
+            AutoSize = true, 
+            Margin = new System.Windows.Forms.Padding(5, 10, 10, 5),
             Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold)
         });
         
@@ -349,51 +358,56 @@ partial class MainForm
             Text = "Off", 
             AutoSize = true, 
             Checked = true, 
-            Margin = new System.Windows.Forms.Padding(5, 8, 5, 5) 
+            Margin = new System.Windows.Forms.Padding(5, 8, 10, 5) 
         };
         rbDemoOff.CheckedChanged += RbDemo_CheckedChanged;
-        playFlow.Controls.Add(rbDemoOff);
-        
-        rbDemoSkiJump = new System.Windows.Forms.RadioButton 
-        { 
-            Text = "🎿 Ski Jump", 
-            AutoSize = true, 
-            Margin = new System.Windows.Forms.Padding(5, 8, 5, 5),
-            ForeColor = System.Drawing.Color.DarkBlue
-        };
-        rbDemoSkiJump.CheckedChanged += RbDemo_CheckedChanged;
-        playFlow.Controls.Add(rbDemoSkiJump);
-        
-        rbDemoTilt = new System.Windows.Forms.RadioButton 
-        { 
-            Text = "↔️ L/R Tilt", 
-            AutoSize = true, 
-            Margin = new System.Windows.Forms.Padding(5, 8, 5, 5),
-            ForeColor = System.Drawing.Color.DarkGreen
-        };
-        rbDemoTilt.CheckedChanged += RbDemo_CheckedChanged;
-        playFlow.Controls.Add(rbDemoTilt);
+        demoFlow.Controls.Add(rbDemoOff);
         
         rbDemoUnified = new System.Windows.Forms.RadioButton 
         { 
-            Text = "⛷️ Unified", 
+            Text = "⛷️ Ski (Unified)", 
             AutoSize = true, 
-            Margin = new System.Windows.Forms.Padding(5, 8, 5, 5),
+            Margin = new System.Windows.Forms.Padding(5, 8, 10, 5),
             ForeColor = System.Drawing.Color.DarkRed,
             Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold)
         };
         rbDemoUnified.CheckedChanged += RbDemo_CheckedChanged;
-        playFlow.Controls.Add(rbDemoUnified);
+        demoFlow.Controls.Add(rbDemoUnified);
         
+        rbDemoTilt = new System.Windows.Forms.RadioButton 
+        { 
+            Text = "↔️ Left/Right", 
+            AutoSize = true, 
+            Margin = new System.Windows.Forms.Padding(5, 8, 20, 5),
+            ForeColor = System.Drawing.Color.DarkGreen
+        };
+        rbDemoTilt.CheckedChanged += RbDemo_CheckedChanged;
+        demoFlow.Controls.Add(rbDemoTilt);
+        
+        // Calibration button
+        btnCalibrateDemoCenter = new System.Windows.Forms.Button 
+        { 
+            Text = "Set Center", 
+            Size = new System.Drawing.Size(85, 30),
+            Margin = new System.Windows.Forms.Padding(10, 5, 10, 5),
+            FlatStyle = System.Windows.Forms.FlatStyle.Flat,
+            BackColor = System.Drawing.Color.SteelBlue,
+            ForeColor = System.Drawing.Color.White,
+            Font = new System.Drawing.Font("Segoe UI", 9F)
+        };
+        btnCalibrateDemoCenter.Click += BtnCalibrateDemoCenter_Click;
+        demoFlow.Controls.Add(btnCalibrateDemoCenter);
+        
+        // Demo status label
         lblDemoStatus = new System.Windows.Forms.Label 
         { 
             Text = "", 
             AutoSize = true, 
-            Margin = new System.Windows.Forms.Padding(10, 12, 5, 5),
+            Margin = new System.Windows.Forms.Padding(10, 10, 5, 5),
             ForeColor = System.Drawing.Color.Purple,
             Font = new System.Drawing.Font("Consolas", 9F)
         };
-        playFlow.Controls.Add(lblDemoStatus);
+        demoFlow.Controls.Add(lblDemoStatus);
     }
 
     #endregion
@@ -422,9 +436,9 @@ partial class MainForm
     private System.Windows.Forms.Button btnResetComp;
     private System.Windows.Forms.CheckBox chkStream;
     private System.Windows.Forms.RadioButton rbDemoOff;
-    private System.Windows.Forms.RadioButton rbDemoSkiJump;
     private System.Windows.Forms.RadioButton rbDemoTilt;
     private System.Windows.Forms.RadioButton rbDemoUnified;
+    private System.Windows.Forms.Button btnCalibrateDemoCenter;
     private System.Windows.Forms.Label lblDemoStatus;
 }
 

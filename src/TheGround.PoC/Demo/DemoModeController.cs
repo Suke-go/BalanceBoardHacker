@@ -30,12 +30,19 @@ public enum DemoMode
     /// - Forward lean = weak vibration (smooth glide)
     /// - Left/Right turn = OPPOSITE side vibrates more (outside ski pressure)
     /// </summary>
-    Unified
+    Unified,
+    
+    /// <summary>
+    /// Four Direction mode: Distinct feedback for each quadrant.
+    /// Front-Left, Front-Right, Back-Left, Back-Right.
+    /// </summary>
+    FourDirection
 }
 
 /// <summary>
 /// Controls demo vibration modes that respond to Balance Board CoP input.
 /// Designed for standalone demonstration without Unity connection.
+/// Supports calibration for personalized center position.
 /// </summary>
 public class DemoModeController
 {
@@ -46,42 +53,53 @@ public class DemoModeController
     private const float BoardWidthMm = 238f;   // X axis, ±119mm
     private const float BoardLengthMm = 433f;  // Y axis, ±216.5mm
     
-    // Dead zone to prevent jitter at center (mm) - smaller = more responsive
-    private const float DeadZoneMm = 8f;
+    // === Calibration ===
+    private Vector2 _calibratedCenter = Vector2.Zero;  // Calibrated center position
+    private bool _isCalibrated = false;
+    
+    // Dead zone for responsiveness (calibration overrides this)
+    private const float DeadZoneMm = 5f;
     
     // === Ski Jump Mode Parameters ===
-    // DRAMATIC version: large amplitude range for clear tactile difference
-    // - Forward lean (Y > 0): acceleration, strong vibration + high-freq texture
-    // - Backward lean (Y < 0): braking/floating, almost no vibration
-    // - Neutral: light vibration
-    private const float SkiForwardThresholdMm = 25f;   // Easier to reach max (was 30)
-    private const float SkiBackwardThresholdMm = -20f; // Easier to reach min (was -25)
-    private const float SkiBaseAmplitude = 0.25f;      // Neutral (was 0.3)
-    private const float SkiMaxAmplitude = 1.0f;        // FULL POWER forward (was 0.8)
-    private const float SkiMinAmplitude = 0.03f;       // Almost silent backward (was 0.1)
-    private const float SkiBaseVelocity = 0.35f;       // Base velocity (was 0.4)
-    private const float SkiMaxVelocity = 1.0f;         // Max velocity (high-freq content)
-    private const float SkiMinVelocity = 0.1f;         // Very low velocity when braking
+    // EXTREME version: maximum contrast for obvious tactile difference
+    private const float SkiForwardThresholdMm = 18f;   // Very easy to reach max
+    private const float SkiBackwardThresholdMm = -15f; // Very easy to reach min
+    private const float SkiBaseAmplitude = 0.20f;      // Light neutral
+    private const float SkiMaxAmplitude = 1.0f;        // FULL POWER
+    private const float SkiMinAmplitude = 0.01f;       // Essentially OFF
+    private const float SkiBaseVelocity = 0.30f;       // Base velocity
+    private const float SkiMaxVelocity = 1.0f;         // Max texture
+    private const float SkiMinVelocity = 0.05f;        // Almost no texture
     
-    // Frequency modulation for ski mode (adds another dimension of change)
-    private const float SkiBaseFrequency = 28f;        // Neutral frequency
-    private const float SkiMaxFrequency = 45f;         // High freq when accelerating
-    private const float SkiMinFrequency = 18f;         // Low rumble when braking
+    // Frequency modulation - EXTREME range for obvious tactile change
+    // Forward (smooth glide) = very low, Backward (resistance) = very high
+    private const float SkiBaseFrequency = 40f;         // Neutral frequency
+    private const float SkiMaxFrequency = 120f;         // High freq for resistance/edging (backward)
+    private const float SkiMinFrequency = 10f;          // Low rumble for smooth glide (forward)
     
     // === Left-Right Tilt Mode Parameters ===
-    // Intuitive tilt feedback: heavier side vibrates more
-    private const float TiltSensitivityMm = 45f;       // More sensitive (was 60)
-    private const float TiltBaseAmplitude = 0.5f;      // Center amplitude (was 0.4)
-    private const float TiltMaxAmplitude = 1.0f;       // Maximum on tilted side (was 0.85)
-    private const float TiltMinAmplitude = 0.05f;      // Almost off on opposite (was 0.1)
+    // Very sensitive for dramatic stereo effect
+    private const float TiltSensitivityMm = 30f;       // Even more sensitive
+    private const float TiltBaseAmplitude = 0.5f;      // Center amplitude
+    private const float TiltMaxAmplitude = 1.0f;       // Full on tilted side
+    private const float TiltMinAmplitude = 0.02f;      // Essentially off on opposite
     
-    // Smoothing - higher = more responsive
-    private float _smoothedAmplitude = 0f;
-    private float _smoothedVelocity = 0f;
-    private float _smoothedFrequency = SkiBaseFrequency;
-    private float _smoothedLeftGain = 0.5f;
-    private float _smoothedRightGain = 0.5f;
-    private const float SmoothingFactor = 0.25f;  // More responsive (was 0.15)
+    // === Two-Stage Smoothing ===
+    // Fast stage: quick response to changes
+    // Slow stage: smooth out the fast stage output
+    private float _fastAmplitude = 0f;
+    private float _slowAmplitude = 0f;
+    private float _fastVelocity = 0f;
+    private float _slowVelocity = 0f;
+    private float _fastFrequency = SkiBaseFrequency;
+    private float _slowFrequency = SkiBaseFrequency;
+    private float _fastLeftGain = 0.5f;
+    private float _slowLeftGain = 0.5f;
+    private float _fastRightGain = 0.5f;
+    private float _slowRightGain = 0.5f;
+    
+    private const float FastSmoothingFactor = 0.6f;   // Quick response to input
+    private const float SlowSmoothingFactor = 0.15f;  // Smooth final output
     
     private DemoMode _currentMode = DemoMode.Off;
     
@@ -107,6 +125,11 @@ public class DemoModeController
     public bool IsActive => _currentMode != DemoMode.Off;
     
     /// <summary>
+    /// Whether the center position has been calibrated.
+    /// </summary>
+    public bool IsCalibrated => _isCalibrated;
+    
+    /// <summary>
     /// Event fired when demo mode changes.
     /// </summary>
     public event Action<DemoMode>? OnDemoModeChanged;
@@ -120,6 +143,25 @@ public class DemoModeController
     {
         _audioManager = audioManager ?? throw new ArgumentNullException(nameof(audioManager));
         _generator = audioManager.Generator;
+    }
+    
+    /// <summary>
+    /// Calibrate the center position. Call this when user is standing neutral.
+    /// </summary>
+    public void CalibrateCenter(Vector2 currentCopMm)
+    {
+        _calibratedCenter = currentCopMm;
+        _isCalibrated = true;
+        OnDebugInfo?.Invoke($"Calibrated: center=({currentCopMm.X:F1}, {currentCopMm.Y:F1})mm");
+    }
+    
+    /// <summary>
+    /// Reset calibration to default (0,0).
+    /// </summary>
+    public void ResetCalibration()
+    {
+        _calibratedCenter = Vector2.Zero;
+        _isCalibrated = false;
     }
     
     private void OnModeChanged()
@@ -139,11 +181,12 @@ public class DemoModeController
             _generator.EnableChannel2 = true;
             _generator.Frequency = 30f;
             
-            // Reset smoothing
-            _smoothedAmplitude = SkiBaseAmplitude;
-            _smoothedVelocity = SkiBaseVelocity;
-            _smoothedLeftGain = 0.5f;
-            _smoothedRightGain = 0.5f;
+            // Reset two-stage smoothing
+            _fastAmplitude = _slowAmplitude = SkiBaseAmplitude;
+            _fastVelocity = _slowVelocity = SkiBaseVelocity;
+            _fastFrequency = _slowFrequency = SkiBaseFrequency;
+            _fastLeftGain = _slowLeftGain = 0.5f;
+            _fastRightGain = _slowRightGain = 0.5f;
             
             // Start audio if not playing
             if (!_audioManager.IsPlaying)
@@ -167,24 +210,31 @@ public class DemoModeController
         if (_currentMode == DemoMode.Off)
             return;
         
+        // Apply calibration offset
+        Vector2 adjustedCoP = copMm - _calibratedCenter;
+        
         if (!isOnBoard)
         {
-            // User stepped off - reduce to minimum
-            _smoothedAmplitude = Lerp(_smoothedAmplitude, 0.05f, SmoothingFactor);
-            _generator.Amplitude = _smoothedAmplitude;
+            // User stepped off - reduce to minimum smoothly
+            _fastAmplitude = Lerp(_fastAmplitude, 0.05f, FastSmoothingFactor);
+            _slowAmplitude = Lerp(_slowAmplitude, _fastAmplitude, SlowSmoothingFactor);
+            _generator.Amplitude = _slowAmplitude;
             return;
         }
         
         switch (_currentMode)
         {
             case DemoMode.SkiJump:
-                UpdateSkiJumpMode(copMm);
+                UpdateSkiJumpMode(adjustedCoP);
                 break;
             case DemoMode.LeftRightTilt:
-                UpdateLeftRightTiltMode(copMm);
+                UpdateLeftRightTiltMode(adjustedCoP);
                 break;
             case DemoMode.Unified:
-                UpdateUnifiedMode(copMm);
+                UpdateUnifiedMode(adjustedCoP);
+                break;
+            case DemoMode.FourDirection:
+                UpdateFourDirectionMode(adjustedCoP);
                 break;
         }
     }
@@ -235,15 +285,18 @@ public class DemoModeController
             targetFrequency = SkiBaseFrequency;
         }
         
-        // Smooth transitions
-        _smoothedAmplitude = Lerp(_smoothedAmplitude, targetAmplitude, SmoothingFactor);
-        _smoothedVelocity = Lerp(_smoothedVelocity, targetVelocity, SmoothingFactor);
-        _smoothedFrequency = Lerp(_smoothedFrequency, targetFrequency, SmoothingFactor);
+        // Two-stage smoothing: fast response + smooth output
+        _fastAmplitude = Lerp(_fastAmplitude, targetAmplitude, FastSmoothingFactor);
+        _slowAmplitude = Lerp(_slowAmplitude, _fastAmplitude, SlowSmoothingFactor);
+        _fastVelocity = Lerp(_fastVelocity, targetVelocity, FastSmoothingFactor);
+        _slowVelocity = Lerp(_slowVelocity, _fastVelocity, SlowSmoothingFactor);
+        _fastFrequency = Lerp(_fastFrequency, targetFrequency, FastSmoothingFactor);
+        _slowFrequency = Lerp(_slowFrequency, _fastFrequency, SlowSmoothingFactor);
         
-        // Apply to generator
-        _generator.Amplitude = _smoothedAmplitude;
-        _generator.Velocity = _smoothedVelocity;
-        _generator.Frequency = _smoothedFrequency;
+        // Apply smoothed values to generator
+        _generator.Amplitude = _slowAmplitude;
+        _generator.Velocity = _slowVelocity;
+        _generator.Frequency = _slowFrequency;
         
         // Both channels equal in ski jump mode
         _generator.EnableChannel1 = true;
@@ -251,7 +304,7 @@ public class DemoModeController
         _generator.Channel1Amplitude = 1.0f;
         _generator.Channel2Amplitude = 1.0f;
         
-        OnDebugInfo?.Invoke($"Ski: Y={y:F1} Amp={_smoothedAmplitude:F2} Freq={_smoothedFrequency:F0}Hz");
+        OnDebugInfo?.Invoke($"Ski: Y={y:F1} Amp={_slowAmplitude:F2} Freq={_slowFrequency:F0}Hz");
     }
     
     /// <summary>
@@ -292,20 +345,21 @@ public class DemoModeController
             targetRightGain = TiltBaseAmplitude;
         }
         
-        // Smooth transitions
-        _smoothedLeftGain = Lerp(_smoothedLeftGain, targetLeftGain, SmoothingFactor);
-        _smoothedRightGain = Lerp(_smoothedRightGain, targetRightGain, SmoothingFactor);
+        // Two-stage smoothing: fast response + smooth output
+        _fastLeftGain = Lerp(_fastLeftGain, targetLeftGain, FastSmoothingFactor);
+        _slowLeftGain = Lerp(_slowLeftGain, _fastLeftGain, SlowSmoothingFactor);
+        _fastRightGain = Lerp(_fastRightGain, targetRightGain, FastSmoothingFactor);
+        _slowRightGain = Lerp(_slowRightGain, _fastRightGain, SlowSmoothingFactor);
         
         // Use per-channel amplitude for precise stereo control
-        // Normalize to 0-1 range relative to max amplitude
-        float maxGain = Math.Max(_smoothedLeftGain, _smoothedRightGain);
+        float maxGain = Math.Max(_slowLeftGain, _slowRightGain);
         _generator.Amplitude = maxGain;
         
         // Set per-channel multipliers (relative to main amplitude)
         if (maxGain > 0.01f)
         {
-            _generator.Channel1Amplitude = _smoothedLeftGain / maxGain;
-            _generator.Channel2Amplitude = _smoothedRightGain / maxGain;
+            _generator.Channel1Amplitude = _slowLeftGain / maxGain;
+            _generator.Channel2Amplitude = _slowRightGain / maxGain;
         }
         else
         {
@@ -317,7 +371,7 @@ public class DemoModeController
         _generator.EnableChannel1 = true;
         _generator.EnableChannel2 = true;
         
-        OnDebugInfo?.Invoke($"Tilt: X={x:F1}mm L={_smoothedLeftGain:F2} R={_smoothedRightGain:F2}");
+        OnDebugInfo?.Invoke($"Tilt: X={x:F1}mm L={_slowLeftGain:F2} R={_slowRightGain:F2}");
     }
     
     /// <summary>
@@ -376,44 +430,49 @@ public class DemoModeController
         float leftMultiplier = 1.0f;
         float rightMultiplier = 1.0f;
         
-        if (tiltRatio > 0.1f)
+        // COMPLETELY OFF inside ski - maximum contrast
+        if (tiltRatio > 0.02f)  // Very low threshold
         {
-            // Leaning RIGHT = turning right = LEFT (outside) stronger
-            leftMultiplier = Lerp(1.0f, 1.5f, tiltRatio);    // Boost outside
-            rightMultiplier = Lerp(1.0f, 0.3f, tiltRatio);   // Reduce inside
+            // Leaning RIGHT = turning right = LEFT (outside) full, RIGHT off
+            leftMultiplier = Lerp(1.0f, 1.5f, tiltRatio);     // Boost outside
+            rightMultiplier = Lerp(1.0f, 0.0f, tiltRatio);    // COMPLETELY OFF inside
         }
-        else if (tiltRatio < -0.1f)
+        else if (tiltRatio < -0.02f)
         {
-            // Leaning LEFT = turning left = RIGHT (outside) stronger
-            rightMultiplier = Lerp(1.0f, 1.5f, -tiltRatio);  // Boost outside
-            leftMultiplier = Lerp(1.0f, 0.3f, -tiltRatio);   // Reduce inside
+            // Leaning LEFT = turning left = RIGHT (outside) full, LEFT off
+            rightMultiplier = Lerp(1.0f, 1.5f, -tiltRatio);   // Boost outside
+            leftMultiplier = Lerp(1.0f, 0.0f, -tiltRatio);    // COMPLETELY OFF inside
         }
         
         // Calculate final channel amplitudes
         float targetLeftAmp = baseAmplitude * leftMultiplier;
         float targetRightAmp = baseAmplitude * rightMultiplier;
         
-        // Clamp to valid range
-        targetLeftAmp = Math.Clamp(targetLeftAmp, 0.02f, 1.0f);
-        targetRightAmp = Math.Clamp(targetRightAmp, 0.02f, 1.0f);
+        // Clamp - allow 0 for complete off
+        targetLeftAmp = Math.Clamp(targetLeftAmp, 0.0f, 1.0f);
+        targetRightAmp = Math.Clamp(targetRightAmp, 0.0f, 1.0f);
         
-        // Smooth all values
-        _smoothedLeftGain = Lerp(_smoothedLeftGain, targetLeftAmp, SmoothingFactor);
-        _smoothedRightGain = Lerp(_smoothedRightGain, targetRightAmp, SmoothingFactor);
-        _smoothedVelocity = Lerp(_smoothedVelocity, targetVelocity, SmoothingFactor);
-        _smoothedFrequency = Lerp(_smoothedFrequency, targetFrequency, SmoothingFactor);
+        // Two-stage smoothing: fast response + smooth output
+        _fastLeftGain = Lerp(_fastLeftGain, targetLeftAmp, FastSmoothingFactor);
+        _slowLeftGain = Lerp(_slowLeftGain, _fastLeftGain, SlowSmoothingFactor);
+        _fastRightGain = Lerp(_fastRightGain, targetRightAmp, FastSmoothingFactor);
+        _slowRightGain = Lerp(_slowRightGain, _fastRightGain, SlowSmoothingFactor);
+        _fastVelocity = Lerp(_fastVelocity, targetVelocity, FastSmoothingFactor);
+        _slowVelocity = Lerp(_slowVelocity, _fastVelocity, SlowSmoothingFactor);
+        _fastFrequency = Lerp(_fastFrequency, targetFrequency, FastSmoothingFactor);
+        _slowFrequency = Lerp(_slowFrequency, _fastFrequency, SlowSmoothingFactor);
         
         // Apply to generator
-        float maxAmp = Math.Max(_smoothedLeftGain, _smoothedRightGain);
+        float maxAmp = Math.Max(_slowLeftGain, _slowRightGain);
         _generator.Amplitude = maxAmp;
-        _generator.Velocity = _smoothedVelocity;
-        _generator.Frequency = _smoothedFrequency;
+        _generator.Velocity = _slowVelocity;
+        _generator.Frequency = _slowFrequency;
         
         // Per-channel multipliers
         if (maxAmp > 0.01f)
         {
-            _generator.Channel1Amplitude = _smoothedLeftGain / maxAmp;
-            _generator.Channel2Amplitude = _smoothedRightGain / maxAmp;
+            _generator.Channel1Amplitude = _slowLeftGain / maxAmp;
+            _generator.Channel2Amplitude = _slowRightGain / maxAmp;
         }
         else
         {
@@ -427,7 +486,72 @@ public class DemoModeController
         // Debug info shows both axes
         string dir = y > DeadZoneMm ? "F" : (y < -DeadZoneMm ? "B" : "-");
         string turn = x > DeadZoneMm ? "→R" : (x < -DeadZoneMm ? "L←" : "--");
-        OnDebugInfo?.Invoke($"Uni: {dir}{turn} L={_smoothedLeftGain:F2} R={_smoothedRightGain:F2} {_smoothedFrequency:F0}Hz");
+        OnDebugInfo?.Invoke($"Uni: {dir}{turn} L={_slowLeftGain:F2} R={_slowRightGain:F2} {_slowFrequency:F0}Hz");
+    }
+    
+    /// <summary>
+    /// Four Direction Mode: Distinct feedback for each quadrant.
+    /// - Front-Left: Low freq, left channel
+    /// - Front-Right: Low freq, right channel  
+    /// - Back-Left: High freq, left channel
+    /// - Back-Right: High freq, right channel
+    /// </summary>
+    private void UpdateFourDirectionMode(Vector2 copMm)
+    {
+        float x = copMm.X;
+        float y = copMm.Y;
+        
+        // Determine quadrant and intensity
+        float xRatio = Math.Clamp(x / TiltSensitivityMm, -1f, 1f);
+        float yRatio = Math.Clamp(y / SkiForwardThresholdMm, -1f, 1f);
+        
+        // Amplitude based on distance from center
+        float distance = MathF.Sqrt(xRatio * xRatio + yRatio * yRatio);
+        float targetAmp = Lerp(0.1f, 1.0f, Math.Min(distance, 1f));
+        
+        // Frequency based on front/back (front=low, back=high)
+        float targetFreq = Lerp(SkiBaseFrequency, yRatio < 0 ? SkiMaxFrequency : SkiMinFrequency, Math.Abs(yRatio));
+        
+        // Channel balance based on left/right
+        float leftMult = xRatio < 0 ? Lerp(1f, 1.5f, -xRatio) : Lerp(1f, 0f, xRatio);
+        float rightMult = xRatio > 0 ? Lerp(1f, 1.5f, xRatio) : Lerp(1f, 0f, -xRatio);
+        
+        float targetLeft = targetAmp * leftMult;
+        float targetRight = targetAmp * rightMult;
+        
+        targetLeft = Math.Clamp(targetLeft, 0f, 1f);
+        targetRight = Math.Clamp(targetRight, 0f, 1f);
+        
+        // Two-stage smoothing
+        _fastLeftGain = Lerp(_fastLeftGain, targetLeft, FastSmoothingFactor);
+        _slowLeftGain = Lerp(_slowLeftGain, _fastLeftGain, SlowSmoothingFactor);
+        _fastRightGain = Lerp(_fastRightGain, targetRight, FastSmoothingFactor);
+        _slowRightGain = Lerp(_slowRightGain, _fastRightGain, SlowSmoothingFactor);
+        _fastFrequency = Lerp(_fastFrequency, targetFreq, FastSmoothingFactor);
+        _slowFrequency = Lerp(_slowFrequency, _fastFrequency, SlowSmoothingFactor);
+        
+        // Apply
+        float maxAmp = Math.Max(_slowLeftGain, _slowRightGain);
+        _generator.Amplitude = Math.Max(maxAmp, 0.05f);
+        _generator.Frequency = _slowFrequency;
+        
+        if (maxAmp > 0.01f)
+        {
+            _generator.Channel1Amplitude = _slowLeftGain / maxAmp;
+            _generator.Channel2Amplitude = _slowRightGain / maxAmp;
+        }
+        else
+        {
+            _generator.Channel1Amplitude = 1f;
+            _generator.Channel2Amplitude = 1f;
+        }
+        
+        _generator.EnableChannel1 = true;
+        _generator.EnableChannel2 = true;
+        
+        // Debug quadrant
+        string quad = (y >= 0 ? "F" : "B") + (x >= 0 ? "R" : "L");
+        OnDebugInfo?.Invoke($"4Dir: {quad} L={_slowLeftGain:F2} R={_slowRightGain:F2} {_slowFrequency:F0}Hz");
     }
     
     private static float Lerp(float a, float b, float t) => a + (b - a) * t;

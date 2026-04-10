@@ -434,12 +434,10 @@ public partial class MainForm : Form
         
         DemoMode newMode = DemoMode.Off;
         
-        if (rb == rbDemoSkiJump)
-            newMode = DemoMode.SkiJump;
+        if (rb == rbDemoUnified)
+            newMode = DemoMode.Unified;
         else if (rb == rbDemoTilt)
             newMode = DemoMode.LeftRightTilt;
-        else if (rb == rbDemoUnified)
-            newMode = DemoMode.Unified;
         
         // Initialize audio if needed
         if (newMode != DemoMode.Off && !_audioManager.IsPlaying)
@@ -472,6 +470,27 @@ public partial class MainForm : Form
             btnPlayAudio.Text = "▶ Play";
             btnPlayAudio.BackColor = System.Drawing.Color.DarkOrange;
         }
+    }
+    
+    private void BtnCalibrateDemoCenter_Click(object? sender, EventArgs e)
+    {
+        // Use the current filtered CoP as the calibrated center
+        _demoController.CalibrateCenter(_filteredCoP);
+        
+        // Visual feedback
+        btnCalibrateDemoCenter.Text = "✓ Done";
+        btnCalibrateDemoCenter.BackColor = System.Drawing.Color.Green;
+        
+        // Reset button after 2 seconds
+        var resetTimer = new System.Windows.Forms.Timer { Interval = 2000 };
+        resetTimer.Tick += (s, args) =>
+        {
+            btnCalibrateDemoCenter.Text = "Set Center";
+            btnCalibrateDemoCenter.BackColor = System.Drawing.Color.SteelBlue;
+            resetTimer.Stop();
+            resetTimer.Dispose();
+        };
+        resetTimer.Start();
     }
     
     private void OnDemoDebugInfo(string info)
